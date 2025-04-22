@@ -1,49 +1,54 @@
-const { default: makeWASocket, DisconnectReason, useSingleFileAuthState } = require('@whiskeysockets/baileys');
-const pino = require('pino');
+const { default: makeWASocket, useSingleFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
+const fs = require('fs');
+const path = require('path');
 
+// Auth state
 const { state, saveState } = useSingleFileAuthState('./auth_info.json');
 
+// Démarrer le bot
 async function startBot() {
-  const sock = makeWASocket({
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: true,
-    auth: state,
-  });
+    const sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: true
+    });
 
-  sock.ev.on('creds.update', saveState);
+    sock.ev.on('creds.update', saveState);
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect } = update;
-    if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) {
-        startBot();
-      }
-    } else if (connection === 'open') {
-      console.log('✅ Bot Suijna XXX connecté avec succès !');
-    }
-  });
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update;
+        if (connection === 'close') {
+            const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('Connexion fermée. Reconnexion :', shouldReconnect);
+            if (shouldReconnect) {
+                startBot();
+            }
+        } else if (connection === 'open') {
+            console.log('✅ Bot connecté à WhatsApp');
+        }
+    });
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg.message) return;
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        const msg = messages[0];
+        if (!msg.message) return;
 
-    const from = msg.key.remoteJid;
-    const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text;
+        const from = msg.key.remoteJid;
+        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
-    if (messageText === '.menu') {
-      await sock.sendMessage(from, { text: '🌸 Bienvenue sur le bot SUIJNA XXX\n\nCommandes :\n.menu\n.info\n.help' });
-    }
+        if (text === '.ping') {
+            await sock.sendMessage(from, { text: '🏓 Pong ! Je suis actif.' });
+        }
 
-    if (messageText === '.info') {
-      await sock.sendMessage(from, { text: '✨ Bot créé par Suijina. Inspiré par la puissance de la purge.' });
-    }
+        if (text === '.menu') {
+            await sock.sendMessage(from, { text: '🌸 Menu de SUIJNA XXX\n\n1. .ping\n2. .menu\n3. .info' });
+        }
 
-    if (messageText === '.help') {
-      await sock.sendMessage(from, { text: '❓ Tape .menu pour voir la liste des commandes.' });
-    }
-  });
+        if (text === '.info') {
+            await sock.sendMessage(from, {
+                text: 'Bot WhatsApp *SUIJNA XXX*\nDéveloppé avec Baileys.\nHebergé sur Render.'
+            });
+        }
+    });
 }
 
 startBot();
